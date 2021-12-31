@@ -1,0 +1,6 @@
+[submodule "vendor/glm"]
+	path = vendor/glm
+	url = https://github.com/g-truc/glm
+[submodule "vendor/minifb"]
+	path = vendor/minifb
+	url = https://github.com/emoon/minifb
