@@ -7,31 +7,12 @@
 
 #include "Framebuffer.h"
 #include "FpsMonitor.h"
+#include "Log.h"
 #include <string>
 #include <utility>
 #include <functional>
-#include <unordered_map>
-#include <chrono>
 #include <cmath>
 #include <MiniFB.h>
-
-static std::unordered_map<std::string, int64_t> startTimeMap;
-
-inline int64_t now() {
-    return std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch()
-    ).count();
-}
-
-inline void SSS(const std::string &tag) {
-    startTimeMap[tag] = now();
-}
-
-inline void EEE(const std::string &tag) {
-    if (startTimeMap.find(tag) == startTimeMap.end()) return;
-    int64_t s = now() - startTimeMap[tag];
-    printf("%s: %lld us\n", tag.c_str(), s);
-}
 
 class Window {
 public:
@@ -62,24 +43,24 @@ public:
                 m_framebuffer.resize(fbWidth, fbHeight);
             }
 
-            SSS("m_onUpdateCallback");
+            LOGP_BEG("m_onUpdateCallback");
             m_onUpdateCallback(m_framebuffer);
-            EEE("m_onUpdateCallback");
+            LOGP_END("m_onUpdateCallback");
 
             if (m_rgbaColorBuffer.size() != fbWidth * fbHeight * 4) {
                 m_rgbaColorBuffer.resize(fbWidth * fbHeight * 4);
             }
 
-            SSS("pixels");
+            LOGP_BEG("pixels");
             m_framebuffer.pixels(m_rgbaColorBuffer.data(), Framebuffer::BGRA8888);
-            EEE("pixels");
+            LOGP_END("pixels");
 
-            SSS("mfb_update_ex");
+            LOGP_BEG("mfb_update_ex");
             int state = mfb_update_ex(
                     m_window, m_rgbaColorBuffer.data(),
                     m_framebuffer.width(), m_framebuffer.height()
             );
-            EEE("mfb_update_ex");
+            LOGP_END("mfb_update_ex");
 
             if (state < 0) {
                 m_window = nullptr;

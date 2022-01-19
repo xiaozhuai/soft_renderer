@@ -3,6 +3,8 @@
 //
 
 #include "Primitive.h"
+#include "Log.h"
+#include <oneapi/tbb.h>
 
 glm::vec3i world2screen(int width, int height, int depth, const glm::vec3 &p) {
     return {
@@ -53,9 +55,9 @@ void drawLine(
 
     for (int x = x1; x <= x2; x++) {
         if (steep) {
-            framebuffer.set(y, x, color);
+            framebuffer.setColor(y, x, color);
         } else {
-            framebuffer.set(x, y, color);
+            framebuffer.setColor(x, y, color);
         }
 
         eps += dy;
@@ -77,6 +79,50 @@ glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const glm::vec
         return {-1.0f, 1.0f, 1.0f};
     }
     return {1.0f - float(u.x + u.y) / float(u.z), float(u.x) / float(u.z), float(u.y) / float(u.z)};
+}
+
+void fragment(
+        int x, int y,
+        std::array<glm::vec3i, 3> &ptsi,
+        const std::array<glm::vec2, 3> &pts2,
+        const std::array<glm::vec3, 3> &pts3,
+        const glm::vec3 &lightDir,
+        const Texture2D &texture,
+        Framebuffer &framebuffer) {
+
+    glm::vec3i p;
+    p.x = x;
+    p.y = y;
+
+    auto bc_screen = barycentric(ptsi[0], ptsi[1], ptsi[2], p);
+    if (bc_screen.x < 0 || bc_screen.y < 0 || bc_screen.z < 0) {
+        return;
+    }
+
+    p.z = (int) std::round(
+            float(ptsi[0].z) * bc_screen[0]
+            + float(ptsi[1].z) * bc_screen[1]
+            + float(ptsi[2].z) * bc_screen[2]
+    );
+    glm::vec2 uv = pts2[0] * bc_screen[0] + pts2[1] * bc_screen[1] + pts2[2] * bc_screen[2];
+    glm::vec3 n = pts3[0] * bc_screen[0] + pts3[1] * bc_screen[1] + pts3[2] * bc_screen[2];
+    // TODO 为什么是负的？
+    n = -glm::normalize(n);
+    float intensity = glm::dot(n, lightDir);
+
+    if (p.z >= std::numeric_limits<uint16_t>::min()
+        && p.z <= std::numeric_limits<uint16_t>::max()
+        && p.z >= framebuffer.getDepth(p.x, p.y)
+        && intensity >= 0) {
+
+        Colorf color = texture.texture(uv);
+        color.r *= intensity;
+        color.g *= intensity;
+        color.b *= intensity;
+
+        framebuffer.setDepth(p.x, p.y, p.z);
+        framebuffer.setColor(p.x, p.y, color);
+    }
 }
 
 void drawTriangle(
@@ -104,46 +150,24 @@ void drawTriangle(
         boxmax.y = std::min(clamp.y, std::max(boxmax.y, ptsi[i].y));
     }
 
-    // auto n = glm::normalize(glm::cross(pts[2] - pts[0], pts[1] - pts[0]));
-    // float intensity = glm::dot(n, lightDir);
-
     // 包围盒内的每一个像素判断在不在三角形内
-#pragma omp parallel for
-    for (int x = boxmin.x; x <= boxmax.x; ++x) {
-        for (int y = boxmin.y; y <= boxmax.y; ++y) {
-            glm::vec3i p;
-            p.x = x;
-            p.y = y;
 
-            auto bc_screen = barycentric(ptsi[0], ptsi[1], ptsi[2], p);
-            if (bc_screen.x < 0 || bc_screen.y < 0 || bc_screen.z < 0) {
-                continue;
+    // tbb并行版本
+    oneapi::tbb::parallel_for(
+            oneapi::tbb::blocked_range2d<int>(boxmin.y, boxmax.y + 1, boxmin.x, boxmax.x + 1),
+            [&](oneapi::tbb::blocked_range2d<int> &r) {
+                for (int y = r.rows().begin(), y_end = r.rows().end(); y < y_end; ++y) {
+                    for (int x = r.cols().begin(), x_end = r.cols().end(); x < x_end; ++x) {
+                        fragment(x, y, ptsi, pts2, pts3, lightDir, texture, framebuffer);
+                    }
+                }
             }
+    );
 
-            p.z = (int) std::round(
-                    float(ptsi[0].z) * bc_screen[0]
-                    + float(ptsi[1].z) * bc_screen[1]
-                    + float(ptsi[2].z) * bc_screen[2]
-            );
-            glm::vec2 uv = pts2[0] * bc_screen[0] + pts2[1] * bc_screen[1] + pts2[2] * bc_screen[2];
-            glm::vec3 n = pts3[0] * bc_screen[0] + pts3[1] * bc_screen[1] + pts3[2] * bc_screen[2];
-            // TODO 为什么是负的？
-            n = -glm::normalize(n);
-            float intensity = glm::dot(n, lightDir);
-
-            if (p.z >= std::numeric_limits<uint16_t>::min()
-                && p.z <= std::numeric_limits<uint16_t>::max()
-                && p.z >= framebuffer.getDepth(p.x, p.y)
-                && intensity >= 0) {
-
-                Colorf color = texture.texture(uv);
-                color.r *= intensity;
-                color.g *= intensity;
-                color.b *= intensity;
-
-                framebuffer.setDepth(p.x, p.y, p.z);
-                framebuffer.set(p.x, p.y, color);
-            }
-        }
-    }
+    // 单线程版本
+    // for (int y = boxmin.y; y <= boxmax.y; ++y) {
+    //     for (int x = boxmin.x; x <= boxmax.x; ++x) {
+    //         fragment(x, y, ptsi, pts2, pts3, lightDir, texture, framebuffer);
+    //     }
+    // }
 }

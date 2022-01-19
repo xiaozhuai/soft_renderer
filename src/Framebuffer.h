@@ -23,9 +23,9 @@ public:
 
     void resize(int width, int height);
 
-    void set(int x, int y, const Colorf &color);
+    void setColor(int x, int y, const Colorf &color);
 
-    Colorf get(int x, int y) const;
+    Colorf getColor(int x, int y) const;
 
     void setDepth(int x, int y, uint16_t depth);
 

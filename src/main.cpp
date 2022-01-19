@@ -6,6 +6,7 @@
 #include "Model.h"
 #include "Texture2D.h"
 #include "Window.h"
+#include "Log.h"
 #include "Signals.h"
 #include "IShader.h"
 
@@ -69,14 +70,14 @@ int main() {
     printf("Framebuffer: %d, %d\n", window.getFramebufferWidth(), window.getFramebufferHeight());
 
     window.onUpdate([&](Framebuffer &framebuffer) {
-        SSS("clear");
+        LOGP_BEG("clear");
         framebuffer.clear(COLOR_BLACK);
-        EEE("clear");
+        LOGP_END("clear");
 
-        SSS("draw");
+        LOGP_BEG("draw");
         // drawModelLines(model, framebuffer);
         drawModelTriangles(model, framebuffer);
-        EEE("draw");
+        LOGP_END("draw");
     });
     window.exec();
     return 0;

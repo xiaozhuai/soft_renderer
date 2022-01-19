@@ -50,7 +50,7 @@ void Framebuffer::resize(int width, int height) {
     m_depthBuffer.resize(width * height);
 }
 
-void Framebuffer::set(int x, int y, const Colorf &color) {
+void Framebuffer::setColor(int x, int y, const Colorf &color) {
     // assert(x >= 0);
     // assert(x < m_width);
     // assert(y >= 0);
@@ -61,7 +61,7 @@ void Framebuffer::set(int x, int y, const Colorf &color) {
     m_colorBuffer[m_width * y + x] = color_f2i(color);
 }
 
-Colorf Framebuffer::get(int x, int y) const {
+Colorf Framebuffer::getColor(int x, int y) const {
     // assert(x >= 0);
     // assert(x < m_width);
     // assert(y >= 0);

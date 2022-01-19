@@ -4,3 +4,6 @@
 [submodule "vendor/minifb"]
 	path = vendor/minifb
 	url = https://github.com/emoon/minifb
+[submodule "vendor/oneTBB"]
+	path = vendor/oneTBB
+	url = https://github.com/oneapi-src/oneTBB
