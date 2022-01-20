@@ -42,6 +42,36 @@ public:
         return m_diffuse;
     }
 
+    inline void verts(std::vector<glm::vec3> &arr) const {
+        int nf = nFaces();
+        arr.resize(nf * 3);
+        for (int faceIndex = 0, i = 0; faceIndex < nf; ++faceIndex) {
+            arr[i++] = vert(faceIndex, 0);
+            arr[i++] = vert(faceIndex, 1);
+            arr[i++] = vert(faceIndex, 2);
+        }
+    }
+
+    inline void uvs(std::vector<glm::vec2> &arr) const {
+        int nf = nFaces();
+        arr.resize(nf * 3);
+        for (int faceIndex = 0, i = 0; faceIndex < nf; ++faceIndex) {
+            arr[i++] = uv(faceIndex, 0);
+            arr[i++] = uv(faceIndex, 1);
+            arr[i++] = uv(faceIndex, 2);
+        }
+    }
+
+    inline void normals(std::vector<glm::vec3> &arr) const {
+        int nf = nFaces();
+        arr.resize(nf * 3);
+        for (int faceIndex = 0, i = 0; faceIndex < nf; ++faceIndex) {
+            arr[i++] = normal(faceIndex, 0);
+            arr[i++] = normal(faceIndex, 1);
+            arr[i++] = normal(faceIndex, 2);
+        }
+    }
+
 private:
     static void loadTexture(const std::string &filename, const std::string &suffix, Texture2D &texture);
 

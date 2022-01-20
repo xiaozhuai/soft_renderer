@@ -4,6 +4,7 @@
 
 #include "Framebuffer.h"
 #include <cmath>
+#include <oneapi/tbb.h>
 #include <stb_image_write.h>
 
 template<typename T>
@@ -95,13 +96,16 @@ uint16_t Framebuffer::getDepth(int x, int y) const {
 }
 
 void Framebuffer::clearColor(const Colorf &color) {
-    // TODO optimize
-    std::fill(m_colorBuffer.begin(), m_colorBuffer.end(), color_f2i(color));
+    auto c = color_f2i(color);
+    oneapi::tbb::parallel_for(0, (int) m_colorBuffer.size(), [&](int i) {
+        m_colorBuffer[i] = c;
+    });
 }
 
 void Framebuffer::clearDepth(uint16_t depth) {
-    // TODO optimize
-    std::fill(m_depthBuffer.begin(), m_depthBuffer.end(), depth);
+    oneapi::tbb::parallel_for(0, (int) m_depthBuffer.size(), [&](int i) {
+        m_depthBuffer[i] = depth;
+    });
 }
 
 bool Framebuffer::saveColorBuffer(const std::string &file, bool flipVertically) const {

@@ -6,19 +6,21 @@
 #include "Log.h"
 #include <oneapi/tbb.h>
 
-glm::vec3i world2screen(int width, int height, int depth, const glm::vec3 &p) {
+glm::vec4i world2screen(int width, int height, int depth, const glm::vec4 &p) {
+    // TODO position w
     return {
             (int) std::round((p[0] + 1.0) * width / 2.0),
             (int) std::round((-p[1] + 1.0) * height / 2.0),
-            (int) std::round((p[2] + 1.0) * depth / 2.0)
+            (int) std::round((p[2] + 1.0) * depth / 2.0),
+            p[3],
     };
 }
 
 void drawLine(
         Framebuffer &framebuffer,
-        const std::array<glm::vec3, 2> &pts,
+        const std::array<glm::vec4, 2> &pts,
         const Colorf &color) {
-    std::array<glm::vec3i, 2> ptsi = {
+    std::array<glm::vec4i, 2> ptsi = {
             world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[0]),
             world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[1])
     };
@@ -69,7 +71,7 @@ void drawLine(
     }
 }
 
-glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const glm::vec3i &v3, const glm::vec3i &p) {
+static glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const glm::vec3i &v3, const glm::vec3i &p) {
     glm::vec3i a(v2.x - v1.x, v3.x - v1.x, v1.x - p.x);
     glm::vec3i b(v2.y - v1.y, v3.y - v1.y, v1.y - p.y);
     // u 向量和 a b 向量的点积为 0，所以 a b 向量叉乘可以得到 u 向量
@@ -81,93 +83,104 @@ glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const glm::vec
     return {1.0f - float(u.x + u.y) / float(u.z), float(u.x) / float(u.z), float(u.y) / float(u.z)};
 }
 
-void fragment(
-        int x, int y,
-        std::array<glm::vec3i, 3> &ptsi,
-        const std::array<glm::vec2, 3> &pts2,
-        const std::array<glm::vec3, 3> &pts3,
-        const glm::vec3 &lightDir,
-        const Texture2D &texture,
-        Framebuffer &framebuffer) {
-
-    glm::vec3i p;
-    p.x = x;
-    p.y = y;
-
-    auto bc_screen = barycentric(ptsi[0], ptsi[1], ptsi[2], p);
-    if (bc_screen.x < 0 || bc_screen.y < 0 || bc_screen.z < 0) {
-        return;
-    }
-
-    p.z = (int) std::round(
-            float(ptsi[0].z) * bc_screen[0]
-            + float(ptsi[1].z) * bc_screen[1]
-            + float(ptsi[2].z) * bc_screen[2]
-    );
-    glm::vec2 uv = pts2[0] * bc_screen[0] + pts2[1] * bc_screen[1] + pts2[2] * bc_screen[2];
-    glm::vec3 n = pts3[0] * bc_screen[0] + pts3[1] * bc_screen[1] + pts3[2] * bc_screen[2];
-    // TODO 为什么是负的？
-    n = -glm::normalize(n);
-    float intensity = glm::dot(n, lightDir);
-
-    if (p.z >= std::numeric_limits<uint16_t>::min()
-        && p.z <= std::numeric_limits<uint16_t>::max()
-        && p.z >= framebuffer.getDepth(p.x, p.y)
-        && intensity >= 0) {
-
-        Colorf color = texture.texture(uv);
-        color.r *= intensity;
-        color.g *= intensity;
-        color.b *= intensity;
-
-        framebuffer.setDepth(p.x, p.y, p.z);
-        framebuffer.setColor(p.x, p.y, color);
-    }
+void primitiveTriangles(int width, int height, int depth, const std::vector<glm::vec4> &positions,
+                        const std::function<void(int, const std::array<glm::vec4i, 3> &)> &func) {
+    int nTriangles = positions.size() / 3;
+    oneapi::tbb::parallel_for(0, nTriangles, [&](int n) {
+        std::array<glm::vec4i, 3> pts = {
+                world2screen(width, height, depth, positions[n * 3]),
+                world2screen(width, height, depth, positions[n * 3 + 1]),
+                world2screen(width, height, depth, positions[n * 3 + 2]),
+        };
+        func(n * 3, pts);
+    });
 }
 
-void drawTriangle(
-        Framebuffer &framebuffer,
-        const std::array<glm::vec3, 3> &pts,
-        const std::array<glm::vec2, 3> &pts2,
-        const std::array<glm::vec3, 3> &pts3,
-        const glm::vec3 &lightDir,
-        const Texture2D &texture) {
-    std::array<glm::vec3i, 3> ptsi = {
-            world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[0]),
-            world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[1]),
-            world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[2])
-    };
-
+void rasterizationTriangle(int width, int height,
+                           int offset,
+                           const std::array<glm::vec4i, 3> &pts,
+                           const std::unordered_map<std::string, AVData> &varyings,
+                           const std::function<void(const glm::vec4i &,
+                                                    const std::unordered_map<std::string, glm::vec4> &)> &func) {
     // 找出包围盒
-    glm::vec2i boxmin(framebuffer.width() - 1, framebuffer.height() - 1);
+    glm::vec2i boxmin(width - 1, height - 1);
     glm::vec2i boxmax(0, 0);
-    glm::vec2i clamp(framebuffer.width() - 1, framebuffer.height() - 1); // 边界
-
+    glm::vec2i clamp(width - 1, height - 1); // 边界
     for (int i = 0; i < 3; ++i) {
-        boxmin.x = std::max(0, std::min(boxmin.x, ptsi[i].x));
-        boxmin.y = std::max(0, std::min(boxmin.y, ptsi[i].y));
-        boxmax.x = std::min(clamp.x, std::max(boxmax.x, ptsi[i].x));
-        boxmax.y = std::min(clamp.y, std::max(boxmax.y, ptsi[i].y));
+        boxmin.x = std::max(0, std::min(boxmin.x, pts[i].x));
+        boxmin.y = std::max(0, std::min(boxmin.y, pts[i].y));
+        boxmax.x = std::min(clamp.x, std::max(boxmax.x, pts[i].x));
+        boxmax.y = std::min(clamp.y, std::max(boxmax.y, pts[i].y));
     }
 
     // 包围盒内的每一个像素判断在不在三角形内
 
-    // tbb并行版本
     oneapi::tbb::parallel_for(
             oneapi::tbb::blocked_range2d<int>(boxmin.y, boxmax.y + 1, boxmin.x, boxmax.x + 1),
             [&](oneapi::tbb::blocked_range2d<int> &r) {
                 for (int y = r.rows().begin(), y_end = r.rows().end(); y < y_end; ++y) {
                     for (int x = r.cols().begin(), x_end = r.cols().end(); x < x_end; ++x) {
-                        fragment(x, y, ptsi, pts2, pts3, lightDir, texture, framebuffer);
+                        // TODO p.w
+                        glm::vec4i p;
+                        p.x = x;
+                        p.y = y;
+
+                        auto bc_screen = barycentric(pts[0], pts[1], pts[2], p);
+                        if (bc_screen.x >= 0 && bc_screen.y >= 0 && bc_screen.z >= 0) {
+                            p.z = (int) std::round(
+                                    float(pts[0].z) * bc_screen[0]
+                                    + float(pts[1].z) * bc_screen[1]
+                                    + float(pts[2].z) * bc_screen[2]
+                            );
+
+                            p.w = (int) std::round(
+                                    float(pts[0].w) * bc_screen[0]
+                                    + float(pts[1].w) * bc_screen[1]
+                                    + float(pts[2].w) * bc_screen[2]
+                            );
+
+                            std::unordered_map<std::string, glm::vec4> varyingsValue;
+                            for (const auto &it: varyings) {
+                                const std::string &name = it.first;
+                                const auto &varying = it.second;
+                                auto *ptr = varying.data.get() + offset * varying.size;
+                                std::array<glm::vec4, 3> pv{};
+                                switch (varying.size) {
+                                    case 1:
+                                        pv[0] = glm::vec4(ptr[0], 0, 0, 0);
+                                        pv[1] = glm::vec4(ptr[1], 0, 0, 0);
+                                        pv[2] = glm::vec4(ptr[2], 0, 0, 0);
+                                        break;
+                                    case 2:
+                                        pv[0] = glm::vec4(ptr[0], ptr[1], 0, 0);
+                                        pv[1] = glm::vec4(ptr[2], ptr[3], 0, 0);
+                                        pv[2] = glm::vec4(ptr[4], ptr[5], 0, 0);
+                                        break;
+                                    case 3:
+                                        pv[0] = glm::vec4(ptr[0], ptr[1], ptr[2], 0);
+                                        pv[1] = glm::vec4(ptr[3], ptr[4], ptr[5], 0);
+                                        pv[2] = glm::vec4(ptr[6], ptr[7], ptr[8], 0);
+                                        break;
+                                    case 4:
+                                        pv[0] = glm::vec4(ptr[0], ptr[1], ptr[2], ptr[3]);
+                                        pv[1] = glm::vec4(ptr[4], ptr[5], ptr[6], ptr[7]);
+                                        pv[2] = glm::vec4(ptr[8], ptr[9], ptr[10], ptr[11]);
+                                        break;
+                                    default:
+                                        pv[0] = glm::vec4(0, 0, 0, 0);
+                                        pv[1] = glm::vec4(0, 0, 0, 0);
+                                        pv[2] = glm::vec4(0, 0, 0, 0);
+                                        break;
+                                }
+                                varyingsValue[name] =
+                                        pv[0] * bc_screen[0]
+                                        + pv[1] * bc_screen[1]
+                                        + pv[2] * bc_screen[2];
+                            }
+                            func(p, varyingsValue);
+                        }
                     }
                 }
             }
     );
-
-    // 单线程版本
-    // for (int y = boxmin.y; y <= boxmax.y; ++y) {
-    //     for (int x = boxmin.x; x <= boxmax.x; ++x) {
-    //         fragment(x, y, ptsi, pts2, pts3, lightDir, texture, framebuffer);
-    //     }
-    // }
 }

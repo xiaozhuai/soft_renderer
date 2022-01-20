@@ -7,6 +7,7 @@
 
 #include "Framebuffer.h"
 #include "FpsMonitor.h"
+#include "Signals.h"
 #include "Log.h"
 #include <string>
 #include <utility>
@@ -34,6 +35,17 @@ public:
 
     inline void setHighDpi(bool enable) { m_highDpi = enable; }
 
+    inline void catchSignals() {
+#if defined(_WIN32)
+        auto catchSignals = {SIGINT, SIGTERM};
+#else
+        auto catchSignals = {SIGINT, SIGTERM, SIGHUP, SIGQUIT};
+#endif
+        Signals::catchSome(catchSignals, [&]() {
+            close();
+        });
+    }
+
     inline void exec() {
         m_fpsMonitor.restart();
         do {
@@ -43,24 +55,18 @@ public:
                 m_framebuffer.resize(fbWidth, fbHeight);
             }
 
-            LOGP_BEG("m_onUpdateCallback");
             m_onUpdateCallback(m_framebuffer);
-            LOGP_END("m_onUpdateCallback");
 
             if (m_rgbaColorBuffer.size() != fbWidth * fbHeight * 4) {
                 m_rgbaColorBuffer.resize(fbWidth * fbHeight * 4);
             }
 
-            LOGP_BEG("pixels");
             m_framebuffer.pixels(m_rgbaColorBuffer.data(), Framebuffer::BGRA8888);
-            LOGP_END("pixels");
 
-            LOGP_BEG("mfb_update_ex");
             int state = mfb_update_ex(
                     m_window, m_rgbaColorBuffer.data(),
                     m_framebuffer.width(), m_framebuffer.height()
             );
-            LOGP_END("mfb_update_ex");
 
             if (state < 0) {
                 m_window = nullptr;
