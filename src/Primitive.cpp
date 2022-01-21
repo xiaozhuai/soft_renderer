@@ -6,13 +6,13 @@
 #include "Log.h"
 #include <oneapi/tbb.h>
 
-glm::vec4i world2screen(int width, int height, int depth, const glm::vec4 &p) {
+ScreenPos world2screen(int width, int height, const glm::vec4 &p) {
     // TODO position w
     return {
-            (int) std::round((p[0] + 1.0) * width / 2.0),
-            (int) std::round((-p[1] + 1.0) * height / 2.0),
-            (int) std::round((p[2] + 1.0) * depth / 2.0 / 10.0),
-            p[3],
+            .x = (int) std::round((p.x + 1.0) * width / 2.0),
+            .y =  (int) std::round((-p.y + 1.0) * height / 2.0),
+            .z = p.z,
+            .w = p.w
     };
 }
 
@@ -20,9 +20,9 @@ void drawLine(
         Framebuffer &framebuffer,
         const std::array<glm::vec4, 2> &pts,
         const Colorf &color) {
-    std::array<glm::vec4i, 2> ptsi = {
-            world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[0]),
-            world2screen(framebuffer.width(), framebuffer.height(), framebuffer.depth(), pts[1])
+    std::array<ScreenPos, 2> ptsi = {
+            world2screen(framebuffer.width(), framebuffer.height(), pts[0]),
+            world2screen(framebuffer.width(), framebuffer.height(), pts[1])
     };
 
     int x1 = ptsi[0].x;
@@ -71,7 +71,7 @@ void drawLine(
     }
 }
 
-static glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const glm::vec3i &v3, const glm::vec3i &p) {
+static glm::vec3 barycentric(const glm::vec2i &v1, const glm::vec2i &v2, const glm::vec2i &v3, const glm::vec2i &p) {
     glm::vec3i a(v2.x - v1.x, v3.x - v1.x, v1.x - p.x);
     glm::vec3i b(v2.y - v1.y, v3.y - v1.y, v1.y - p.y);
     // u 向量和 a b 向量的点积为 0，所以 a b 向量叉乘可以得到 u 向量
@@ -83,14 +83,14 @@ static glm::vec3 barycentric(const glm::vec3i &v1, const glm::vec3i &v2, const g
     return {1.0f - float(u.x + u.y) / float(u.z), float(u.x) / float(u.z), float(u.y) / float(u.z)};
 }
 
-void primitiveTriangles(int width, int height, int depth, const std::vector<glm::vec4> &positions,
-                        const std::function<void(int, const std::array<glm::vec4i, 3> &)> &func) {
+void primitiveTriangles(int width, int height, const std::vector<glm::vec4> &positions,
+                        const std::function<void(int, const std::array<ScreenPos, 3> &)> &func) {
     int nTriangles = positions.size() / 3;
     oneapi::tbb::parallel_for(0, nTriangles, [&](int n) {
-        std::array<glm::vec4i, 3> pts = {
-                world2screen(width, height, depth, positions[n * 3]),
-                world2screen(width, height, depth, positions[n * 3 + 1]),
-                world2screen(width, height, depth, positions[n * 3 + 2]),
+        std::array<ScreenPos, 3> pts = {
+                world2screen(width, height, positions[n * 3]),
+                world2screen(width, height, positions[n * 3 + 1]),
+                world2screen(width, height, positions[n * 3 + 2]),
         };
         func(n * 3, pts);
     });
@@ -98,9 +98,9 @@ void primitiveTriangles(int width, int height, int depth, const std::vector<glm:
 
 void rasterizationTriangle(int width, int height,
                            int offset,
-                           const std::array<glm::vec4i, 3> &pts,
+                           const std::array<ScreenPos, 3> &pts,
                            const std::unordered_map<std::string, AVData> &varyings,
-                           const std::function<void(const glm::vec4i &,
+                           const std::function<void(const ScreenPos &,
                                                     const std::unordered_map<std::string, glm::vec4> &)> &func) {
     // 找出包围盒
     glm::vec2i boxmin(width - 1, height - 1);
@@ -121,30 +121,32 @@ void rasterizationTriangle(int width, int height,
                 for (int y = r.rows().begin(), y_end = r.rows().end(); y < y_end; ++y) {
                     for (int x = r.cols().begin(), x_end = r.cols().end(); x < x_end; ++x) {
                         // TODO p.w
-                        glm::vec4i p;
+                        ScreenPos p{};
                         p.x = x;
                         p.y = y;
 
-                        auto bc_screen = barycentric(pts[0], pts[1], pts[2], p);
+                        auto bc_screen = barycentric(pts[0].xy(), pts[1].xy(), pts[2].xy(), p.xy());
                         if (bc_screen.x >= 0 && bc_screen.y >= 0 && bc_screen.z >= 0) {
-                            p.z = (int) std::round(
-                                    float(pts[0].z) * bc_screen[0]
-                                    + float(pts[1].z) * bc_screen[1]
-                                    + float(pts[2].z) * bc_screen[2]
-                            );
+                            glm::vec3 bc_clip = {bc_screen.x / pts[0].w, bc_screen.y / pts[1].w,
+                                                 bc_screen.z / pts[2].w};
+                            bc_clip = bc_clip / (bc_clip.x + bc_clip.y + bc_clip.z);
 
-                            p.w = (int) std::round(
-                                    float(pts[0].w) * bc_screen[0]
-                                    + float(pts[1].w) * bc_screen[1]
-                                    + float(pts[2].w) * bc_screen[2]
-                            );
+                            p.z = glm::dot(glm::vec3(pts[0].z, pts[1].z, pts[2].z), bc_clip);
+                            p.w = glm::dot(glm::vec3(pts[0].w, pts[1].w, pts[2].w), bc_clip);
+
+                            // p.z = pts[0].z * bc_screen[0]
+                            //               + pts[1].z * bc_screen[1]
+                            //               + pts[2].z * bc_screen[2];
+                            // p.w = pts[0].w * bc_screen[0]
+                            //       + pts[1].w * bc_screen[1]
+                            //       + pts[2].w * bc_screen[2];
 
                             std::unordered_map<std::string, glm::vec4> varyingsValue;
                             for (const auto &it: varyings) {
                                 const std::string &name = it.first;
                                 const auto &varying = it.second;
                                 auto *ptr = varying.data.get() + offset * varying.size;
-                                std::array<glm::vec4, 3> pv{};
+                                glm::mat<3, 4, float, glm::defaultp> pv{};
                                 switch (varying.size) {
                                     case 1:
                                         pv[0] = glm::vec4(ptr[0], 0, 0, 0);
@@ -172,10 +174,13 @@ void rasterizationTriangle(int width, int height,
                                         pv[2] = glm::vec4(0, 0, 0, 0);
                                         break;
                                 }
-                                varyingsValue[name] =
-                                        pv[0] * bc_screen[0]
-                                        + pv[1] * bc_screen[1]
-                                        + pv[2] * bc_screen[2];
+
+                                varyingsValue[name] = pv * bc_clip;
+
+                                // varyingsValue[name] =
+                                //         pv[0] * bc_screen[0]
+                                //         + pv[1] * bc_screen[1]
+                                //         + pv[2] * bc_screen[2];
                             }
                             func(p, varyingsValue);
                         }

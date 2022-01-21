@@ -137,19 +137,18 @@ public:
         });
 
         primitiveTriangles(
-                framebuffer.width(), framebuffer.height(), framebuffer.depth(),
+                framebuffer.width(), framebuffer.height(),
                 m_positions,
-                [this, &framebuffer](int offset, const std::array<glm::vec4i, 3> &pts) {
+                [this, &framebuffer](int offset, const std::array<ScreenPos, 3> &pts) {
                     rasterizationTriangle(
                             framebuffer.width(), framebuffer.height(),
                             offset,
                             pts, m_varyings,
                             [this, &framebuffer](
-                                    const glm::vec4i &p,
+                                    const ScreenPos &p,
                                     const std::unordered_map<std::string, glm::vec4> &varyingsValue) {
-                                if (p.z < std::numeric_limits<uint16_t>::min()
-                                    || p.z > std::numeric_limits<uint16_t>::max()
-                                    || p.z > framebuffer.getDepth(p.x, p.y)) {
+                                // occlusion culling
+                                if (p.z > framebuffer.getDepth(p.x, p.y)) {
                                     return;
                                 }
 
@@ -159,10 +158,9 @@ public:
                                 Colorf fragColor = {0.0f, 0.0f, 0.0f, 0.0f};
                                 bool discard = false;
                                 fs.main(fragColor, discard);
-                                if (!discard) {
-                                    framebuffer.setDepth(p.x, p.y, p.z);
-                                    framebuffer.setColor(p.x, p.y, fragColor);
-                                }
+                                if (discard) return;
+                                framebuffer.setDepth(p.x, p.y, p.z);
+                                framebuffer.setColor(p.x, p.y, fragColor);
                             }
                     );
                 }

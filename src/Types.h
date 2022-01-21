@@ -61,4 +61,19 @@ struct AVData {
     std::shared_ptr<float> data;
 };
 
+struct ScreenPos {
+    inline glm::vec2i &xy() { return *((glm::vec2i *) &x); }
+
+    inline glm::vec2 &zw() { return *((glm::vec2 *) &z); }
+
+    inline const glm::vec2i &xy() const { return *((glm::vec2i *) &x); }
+
+    inline const glm::vec2 &zw() const { return *((glm::vec2 *) &z); }
+
+    int x = 0;
+    int y = 0;
+    float z = 0.0f;
+    float w = 0.0f;
+};
+
 #endif //SOFT_RENDERER_TYPES_H

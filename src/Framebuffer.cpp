@@ -73,7 +73,7 @@ Colorf Framebuffer::getColor(int x, int y) const {
     return color_i2f(m_colorBuffer[m_width * y + x]);
 }
 
-void Framebuffer::setDepth(int x, int y, uint16_t depth) {
+void Framebuffer::setDepth(int x, int y, float depth) {
     // assert(x >= 0);
     // assert(x < m_width);
     // assert(y >= 0);
@@ -84,7 +84,7 @@ void Framebuffer::setDepth(int x, int y, uint16_t depth) {
     m_depthBuffer[m_width * y + x] = depth;
 }
 
-uint16_t Framebuffer::getDepth(int x, int y) const {
+float Framebuffer::getDepth(int x, int y) const {
     // assert(x >= 0);
     // assert(x < m_width);
     // assert(y >= 0);
@@ -102,7 +102,7 @@ void Framebuffer::clearColor(const Colorf &color) {
     });
 }
 
-void Framebuffer::clearDepth(uint16_t depth) {
+void Framebuffer::clearDepth(float depth) {
     oneapi::tbb::parallel_for(0, (int)m_depthBuffer.size(), [&](int i){
         m_depthBuffer[i] = depth;
     });
@@ -116,13 +116,15 @@ bool Framebuffer::saveColorBuffer(const std::string &file, bool flipVertically) 
 }
 
 bool Framebuffer::saveDepthBuffer(const std::string &file, bool flipVertically) const {
-    int nPixels = m_width * m_height;
-    std::vector<uint8_t> gray(nPixels);
-    for (int i = 0; i < nPixels; ++i) {
-        gray[i] = (uint8_t) std::round(float(m_depthBuffer[i]) / 65535.0f * 255.0f);
-    }
-    stbi_flip_vertically_on_write(flipVertically);
-    return stbi_write_png(file.c_str(), m_width, m_height, 1, gray.data(), 0);
+    // int nPixels = m_width * m_height;
+    // std::vector<uint8_t> gray(nPixels);
+    // for (int i = 0; i < nPixels; ++i) {
+    //     gray[i] = (uint8_t) std::round(float(m_depthBuffer[i]) / 65535.0f * 255.0f);
+    // }
+    // stbi_flip_vertically_on_write(flipVertically);
+    // return stbi_write_png(file.c_str(), m_width, m_height, 1, gray.data(), 0);
+    // TODO
+    return false;
 }
 
 void Framebuffer::pixels(uint8_t *pixels, int format) const {

@@ -10,16 +10,16 @@
 #include "Types.h"
 #include <unordered_map>
 
-glm::vec4i world2screen(int width, int height, int depth, const glm::vec4 &p);
+ScreenPos world2screen(int width, int height, int depth, const glm::vec4 &p);
 
-void primitiveTriangles(int width, int height, int depth,
+void primitiveTriangles(int width, int height,
                                const std::vector<glm::vec4> &positions,
-                               const std::function<void(int, const std::array<glm::vec4i, 3> &)> &func);
+                               const std::function<void(int, const std::array<ScreenPos, 3> &)> &func);
 
 void rasterizationTriangle(int width, int height,
                                   int offset,
-                                  const std::array<glm::vec4i, 3> &pts,
+                                  const std::array<ScreenPos, 3> &pts,
                                   const std::unordered_map<std::string, AVData> &varyings,
-                                  const std::function<void(const glm::vec4i &, const std::unordered_map<std::string, glm::vec4> &)> &func);
+                                  const std::function<void(const ScreenPos &, const std::unordered_map<std::string, glm::vec4> &)> &func);
 
 #endif //SOFT_RENDERER_PRIMITIVE_H

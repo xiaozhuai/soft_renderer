@@ -12,7 +12,7 @@
 #include <cmath>
 #include <glm/glm.hpp>
 
-class VShader : public IVertexShader {
+class AfricanVShader : public IVertexShader {
 DEFINE_ATTRIBUTES_BEGIN()
     DEFINE_ATTRIBUTE(aPosition, 3)
     DEFINE_ATTRIBUTE(aTexCoords, 2)
@@ -49,7 +49,7 @@ public:
     glm::mat4 model = glm::mat4(1.0f);
 };
 
-class FShader : public IFragmentShader {
+class AfricanFShader : public IFragmentShader {
 
 DEFINE_VARYINGS_BEGIN()
     DEFINE_VARYING(vPosition, 3)
@@ -85,7 +85,7 @@ public:
         fragColor = {color, 1.0f};
     }
 
-    glm::vec3 viewPos{0.0f, 0.0f, 1.0f};
+    glm::vec3 viewPos{};
     Texture2D diffuseTexture;
     Texture2D specularTexture;
 
@@ -94,10 +94,45 @@ private:
     const glm::vec3 lightColor{1.0f, 1.0f, 1.0f};
 
     const float ambientStrength = 0.1f;
-    const glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
+    const glm::vec3 lightPos{0.5f, 1.0f, 2.0f};
     const float diffuseStrength = 0.8f;
     const float specularStrength = 0.5f;
     const float shininess = 32.0f;
+};
+
+
+class TriVShader : public IVertexShader {
+DEFINE_ATTRIBUTES_BEGIN()
+                                DEFINE_ATTRIBUTE(aPosition, 2)
+                                DEFINE_ATTRIBUTE(aColor, 3)
+    DEFINE_ATTRIBUTES_END()
+
+DEFINE_VARYINGS_BEGIN()
+                                DEFINE_VARYING(vColor, 3)
+    DEFINE_VARYINGS_END()
+
+
+public:
+    void main(glm::vec4 &position) override {
+        VAR_ATTRIBUTE(aPosition, 2);
+        VAR_ATTRIBUTE(aColor, 3);
+        VAR_VARYING(vColor, 3);
+        position = glm::vec4(aPosition, 0, 1);
+        vColor = aColor;
+    }
+};
+
+class TriFShader : public IFragmentShader {
+
+DEFINE_VARYINGS_BEGIN()
+                                DEFINE_VARYING(vColor, 3)
+    DEFINE_VARYINGS_END()
+
+public:
+    void main(Colorf &fragColor, bool &discard) override {
+        VAR_VARYING(vColor, 3);
+        fragColor = {vColor, 1.0f};
+    }
 };
 
 int main() {
@@ -123,24 +158,70 @@ int main() {
     camera.setPitch(0.0f);
     camera.setYaw(-90.0f);
 
-    Program<VShader, FShader> program;
+    Program<AfricanVShader, AfricanFShader> africanProgram;
+    Program<TriVShader, TriFShader> triProgram;
 
-    Window window("Soft Renderer", 256, 256, WF_RESIZABLE);
-    window.setHighDpi(false);
-    printf("Framebuffer: %d, %d\n", window.getFramebufferWidth(), window.getFramebufferHeight());
+    Window window("Soft Renderer", 512, 512, WF_RESIZABLE);
+    LOG("Framebuffer: %d, %d", window.getFramebufferWidth(), window.getFramebufferHeight());
 
+    bool rotating = false;
+    window.onMouseButton([&](mfb_mouse_button button, mfb_key_mod mod, bool isPressed) {
+        if (button == MOUSE_BTN_2) {
+            rotating = isPressed;
+            if (rotating) {
+                camera.resetMouseMove(window.getMouseX(), window.getMouseY());
+            }
+        }
+    });
     window.onMouseMove([&](int x, int y) {
-        camera.processMouseMove(x, y);
-        printf("%d %d\n", x, y);
+        if (rotating) camera.processMouseMove(x, y);
     });
 
     window.onMouseScroll([&](mfb_key_mod mod, float deltaX, float deltaY) {
         camera.processMouseScroll(deltaX, deltaY);
     });
 
+    window.onKeyboard([&](mfb_key key, mfb_key_mod mod, bool isPressed) {
+        // printf("%f %f %f ---> %f %f %f\n",
+        //        camera.getPosition()[0], camera.getPosition()[1], camera.getPosition()[2],
+        //        camera.getFront()[0], camera.getFront()[1], camera.getFront()[2]);
+        if (key == KB_KEY_W || key == KB_KEY_UP) {
+            camera.processMove(FppCamera::MoveDirection::Forward, 20);
+        }
+        if (key == KB_KEY_S || key == KB_KEY_DOWN) {
+            camera.processMove(FppCamera::MoveDirection::Backward, 20);
+        }
+        if (key == KB_KEY_A || key == KB_KEY_LEFT) {
+            camera.processMove(FppCamera::MoveDirection::Left, 20);
+        }
+        if (key == KB_KEY_D || key == KB_KEY_RIGHT) {
+            camera.processMove(FppCamera::MoveDirection::Right, 20);
+        }
+        if (key == KB_KEY_SPACE) {
+            camera.processMove(FppCamera::MoveDirection::Up, 20);
+        }
+        if (key == KB_KEY_Z) {
+            camera.processMove(FppCamera::MoveDirection::Down, 20);
+        }
+    });
+
+    float triVertex[] = {
+            0.0f, 1.0f,
+            -1.0f, -1.0f,
+            1.0f, -1.0f
+    };
+    float triColor[] = {
+            1.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 1.0f,
+    };
+
     window.onUpdate([&](Framebuffer &framebuffer) {
         camera.setAspect((float) framebuffer.width() / (float) framebuffer.height());
 
+        printf("%f %f %f ---> %f %f %f\n",
+               camera.getPosition()[0], camera.getPosition()[1], camera.getPosition()[2],
+               camera.getFront()[0], camera.getFront()[1], camera.getFront()[2]);
 
         LOGP_BEG("clear");
         framebuffer.clear(Colorf(0.0f, 0.0f, 0.0f, 1.0f));
@@ -150,27 +231,31 @@ int main() {
 
         glm::mat4 model = glm::mat4(1.0f);
 
-        program.attributePointer("aPosition", 3, (float *) headVerts.data());
-        program.attributePointer("aTexCoords", 2, (float *) headUvs.data());
-        program.attributePointer("aNormal", 3, (float *) headNormals.data());
-        program.getVertexShader().projection = camera.getProjection();
-        program.getVertexShader().view = camera.getView();
-        program.getVertexShader().model = model;
-        program.getFragmentShader().diffuseTexture = headModel.diffuse();
-        program.getFragmentShader().specularTexture = headModel.specular();
-        program.getFragmentShader().viewPos = camera.getPosition();
-        program.drawTriangles(framebuffer, headVerts.size());
+        africanProgram.attributePointer("aPosition", 3, (float *) headVerts.data());
+        africanProgram.attributePointer("aTexCoords", 2, (float *) headUvs.data());
+        africanProgram.attributePointer("aNormal", 3, (float *) headNormals.data());
+        africanProgram.getVertexShader().projection = camera.getProjection();
+        africanProgram.getVertexShader().view = camera.getView();
+        africanProgram.getVertexShader().model = model;
+        africanProgram.getFragmentShader().diffuseTexture = headModel.diffuse();
+        africanProgram.getFragmentShader().specularTexture = headModel.specular();
+        africanProgram.getFragmentShader().viewPos = camera.getPosition();
+        africanProgram.drawTriangles(framebuffer, headVerts.size());
 
-        program.attributePointer("aPosition", 3, (float *) headEyeInnerVerts.data());
-        program.attributePointer("aTexCoords", 2, (float *) headEyeInnerUvs.data());
-        program.attributePointer("aNormal", 3, (float *) headEyeInnerNormals.data());
-        program.getVertexShader().projection = camera.getProjection();
-        program.getVertexShader().view = camera.getView();
-        program.getVertexShader().model = model;
-        program.getFragmentShader().diffuseTexture = headEyeInnerModel.diffuse();
-        program.getFragmentShader().specularTexture = headEyeInnerModel.specular();
-        program.getFragmentShader().viewPos = camera.getPosition();
-        program.drawTriangles(framebuffer, headEyeInnerVerts.size());
+        africanProgram.attributePointer("aPosition", 3, (float *) headEyeInnerVerts.data());
+        africanProgram.attributePointer("aTexCoords", 2, (float *) headEyeInnerUvs.data());
+        africanProgram.attributePointer("aNormal", 3, (float *) headEyeInnerNormals.data());
+        africanProgram.getVertexShader().projection = camera.getProjection();
+        africanProgram.getVertexShader().view = camera.getView();
+        africanProgram.getVertexShader().model = model;
+        africanProgram.getFragmentShader().diffuseTexture = headEyeInnerModel.diffuse();
+        africanProgram.getFragmentShader().specularTexture = headEyeInnerModel.specular();
+        africanProgram.getFragmentShader().viewPos = camera.getPosition();
+        africanProgram.drawTriangles(framebuffer, headEyeInnerVerts.size());
+
+        // triProgram.attributePointer("aPosition", 2, triVertex);
+        // triProgram.attributePointer("aColor", 3, triColor);
+        // triProgram.drawTriangles(framebuffer, 3);
 
         LOGP_END("draw");
     });

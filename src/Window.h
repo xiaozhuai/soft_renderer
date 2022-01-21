@@ -17,8 +17,7 @@
 
 class Window {
 public:
-    Window(const std::string &title, int width, int height, int flags = 0)
-            : m_framebuffer(width, height) {
+    Window(const std::string &title, int width, int height, int flags = 0) {
         m_window = mfb_open_ex(title.c_str(), width, height, flags);
         mfb_set_active_callback(m_window, this, &Window::onActiveInternal);
         mfb_set_resize_callback(m_window, this, &Window::onResizeInternal);
@@ -29,7 +28,7 @@ public:
         mfb_set_mouse_move_callback(m_window, this, &Window::onMouseMoveInternal);
         mfb_set_mouse_scroll_callback(m_window, this, &Window::onMouseScrollInternal);
         m_fpsMonitor.setFpsCallback([&](int fps) {
-            printf("FPS: %d\n", fps);
+            LOG("FPS: %d", fps);
         });
     }
 
@@ -114,6 +113,14 @@ public:
         }
     }
 
+    inline int getMouseX() const {
+        return mfb_get_mouse_x(m_window);
+    }
+
+    inline int getMouseY() const {
+        return mfb_get_mouse_y(m_window);
+    }
+
     static inline uint32_t getTargetFps() {
         return mfb_get_target_fps();
     }
@@ -189,6 +196,9 @@ private:
 
     inline void onKeyboardInternal(struct mfb_window *window, mfb_key key, mfb_key_mod mod, bool isPressed) {
         if (!m_onKeyboardCallback) return;
+        if (key == KB_KEY_ESCAPE && !isPressed) {
+            close();
+        }
         m_onKeyboardCallback(key, mod, isPressed);
     }
 

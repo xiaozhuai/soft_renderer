@@ -11,6 +11,8 @@
 #include <vector>
 #include <array>
 
+#define DEFAULT_DEPTH (std::numeric_limits<float>::max())
+
 class Framebuffer {
 public:
     enum {
@@ -19,6 +21,8 @@ public:
     };
 
 public:
+    Framebuffer() = default;
+
     Framebuffer(int width, int height);
 
     void resize(int width, int height);
@@ -27,17 +31,17 @@ public:
 
     Colorf getColor(int x, int y) const;
 
-    void setDepth(int x, int y, uint16_t depth);
+    void setDepth(int x, int y, float depth);
 
-    uint16_t getDepth(int x, int y) const;
+    float getDepth(int x, int y) const;
 
     void clearColor(const Colorf &color = Colorf(0.0f, 0.0f, 0.0f, 0.0f));
 
-    void clearDepth(uint16_t depth = std::numeric_limits<uint16_t>::max());
+    void clearDepth(float depth = DEFAULT_DEPTH);
 
     inline void clear(
             const Colorf &color = Colorf(0.0f, 0.0f, 0.0f, 0.0f),
-            uint16_t depth = std::numeric_limits<uint16_t>::max()) {
+            float depth = DEFAULT_DEPTH) {
         clearColor(color);
         clearDepth(depth);
     }
@@ -50,15 +54,13 @@ public:
 
     inline int height() const { return m_height; }
 
-    inline int depth() const { return std::numeric_limits<uint16_t>::max(); }
-
     void pixels(uint8_t *pixels, int format) const;
 
 private:
     int m_width = 0;
     int m_height = 0;
     std::vector<ColorBGRA8888> m_colorBuffer; // RGBA8888
-    std::vector<uint16_t> m_depthBuffer;
+    std::vector<float> m_depthBuffer;
 };
 
 

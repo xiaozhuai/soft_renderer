@@ -176,10 +176,14 @@ public:
         m_fov = clamp(m_fov, m_minFov, m_maxFov);
     }
 
+    inline void resetMouseMove(double x, double y) {
+        m_mouseLastX = x;
+        m_mouseLastY = y;
+    }
+
     inline void processMouseMove(double x, double y) {
         if (m_firstMouseMove) {
-            m_mouseLastX = x;
-            m_mouseLastY = y;
+            resetMouseMove(x, y);
             m_firstMouseMove = false;
         }
         double deltaX = x - m_mouseLastX;

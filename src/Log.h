@@ -19,7 +19,8 @@ inline int64_t now() {
 static std::unordered_map<std::string, int64_t> start_time_map;
 }
 
-#define LOG(format, ...) do { printf(format "\n", ##__VA_ARGS__); } while(0)
+#define LOG(format, ...)
+// #define LOG(format, ...) do { printf(format "\n", ##__VA_ARGS__); } while(0)
 #define LOGP_BEG(tag) do { __log__::start_time_map[tag] = __log__::now(); } while(0)
 #define LOGP_END(tag) do { if (__log__::start_time_map.find(tag) != __log__::start_time_map.end()) { LOG("%s spend %lldμs", tag, __log__::now() - __log__::start_time_map[tag]); } } while(0)
 
