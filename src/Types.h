@@ -43,10 +43,12 @@ struct AttributeInfo {
 
 struct AVData {
     inline void alloc(std::string _name, int _size, int _count) {
+        if (data == nullptr || size * count < _size * _count) {
+            data = std::shared_ptr<float>(new float[_size * _count], std::default_delete<float[]>());
+        }
         name = std::move(_name);
         size = _size;
         count = _count;
-        data = std::shared_ptr<float>(new float[size * count], std::default_delete<float[]>());
     }
 
     inline size_t nFloats() const { return size * count; }

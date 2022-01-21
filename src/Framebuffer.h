@@ -33,11 +33,11 @@ public:
 
     void clearColor(const Colorf &color = Colorf(0.0f, 0.0f, 0.0f, 0.0f));
 
-    void clearDepth(uint16_t depth = 0);
+    void clearDepth(uint16_t depth = std::numeric_limits<uint16_t>::max());
 
     inline void clear(
             const Colorf &color = Colorf(0.0f, 0.0f, 0.0f, 0.0f),
-            uint16_t depth = 0) {
+            uint16_t depth = std::numeric_limits<uint16_t>::max()) {
         clearColor(color);
         clearDepth(depth);
     }

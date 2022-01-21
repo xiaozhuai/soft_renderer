@@ -42,6 +42,10 @@ public:
         return m_diffuse;
     }
 
+    inline const Texture2D &specular() const {
+        return m_specular;
+    }
+
     inline void verts(std::vector<glm::vec3> &arr) const {
         int nf = nFaces();
         arr.resize(nf * 3);
@@ -83,6 +87,7 @@ private:
     std::vector<std::vector<int>> m_vtFaces;
     std::vector<std::vector<int>> m_vnFaces;
     Texture2D m_diffuse;
+    Texture2D m_specular;
 
 };
 

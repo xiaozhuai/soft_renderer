@@ -11,7 +11,7 @@ glm::vec4i world2screen(int width, int height, int depth, const glm::vec4 &p) {
     return {
             (int) std::round((p[0] + 1.0) * width / 2.0),
             (int) std::round((-p[1] + 1.0) * height / 2.0),
-            (int) std::round((p[2] + 1.0) * depth / 2.0),
+            (int) std::round((p[2] + 1.0) * depth / 2.0 / 10.0),
             p[3],
     };
 }

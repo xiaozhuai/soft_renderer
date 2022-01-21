@@ -7,12 +7,10 @@
 #include "Window.h"
 #include "Log.h"
 #include "IShader.h"
+#include "FppCamera.h"
 
-#include <iostream>
 #include <cmath>
 #include <glm/glm.hpp>
-
-Model model("assets/african_head.obj");
 
 class VShader : public IVertexShader {
 DEFINE_ATTRIBUTES_BEGIN()
@@ -28,7 +26,6 @@ DEFINE_VARYINGS_BEGIN()
 DEFINE_VARYINGS_END()
 
 
-
 public:
     void main(glm::vec4 &position) override {
         VAR_ATTRIBUTE(aPosition, 3);
@@ -37,11 +34,19 @@ public:
         VAR_VARYING(vPosition, 3);
         VAR_VARYING(vTexCoords, 2);
         VAR_VARYING(vNormal, 3);
-        position = glm::vec4(aPosition, 1.0f);
-        vPosition = aPosition;
+        vPosition = glm::vec3(model * glm::vec4(aPosition, 1.0));
         vTexCoords = aTexCoords;
-        vNormal = aNormal;
+        vNormal = glm::mat3(glm::transpose(glm::inverse(model))) * aNormal;
+        position = projection * view * model * glm::vec4(vPosition, 1.0f);
+        // position = glm::vec4(aPosition, 1.0f);
+        // vPosition = aPosition;
+        // vTexCoords = aTexCoords;
+        // vNormal = aNormal;
     }
+
+    glm::mat4 projection = glm::mat4(1.0f);
+    glm::mat4 view = glm::mat4(1.0f);
+    glm::mat4 model = glm::mat4(1.0f);
 };
 
 class FShader : public IFragmentShader {
@@ -58,47 +63,115 @@ public:
         VAR_VARYING(vTexCoords, 2);
         VAR_VARYING(vNormal, 3);
 
-        // fragColor = {1.0f, 1.0f, 1.0f, 1.0f};
+        auto normal = glm::normalize(vNormal);
+        auto lightDir = glm::normalize(lightPos - vPosition);
+        auto viewDir = glm::normalize(viewPos - vPosition);
+        auto reflectDir = glm::reflect(-lightDir, normal);
+        glm::vec3 diffuseColor = diffuseTexture.texture(vTexCoords);
+        glm::vec3 specularColor = specularTexture.texture(vTexCoords);
 
-        glm::vec3 color = model.diffuse().texture(vTexCoords);
-        auto n = -glm::normalize(vNormal);
-        float intensity = glm::dot(n, lightDir);
-        discard = intensity < 0.0f;
-        fragColor = {color * intensity, 1.0f};
+        // ambient lighting
+        auto ambient = ambientColor * ambientStrength * diffuseColor;
+
+        // diffuse lighting
+        float diff = std::max(glm::dot(normal, lightDir), 0.0f);
+        auto diffuse = lightColor * diffuseStrength * diff * diffuseColor;
+
+        // specular lighting
+        float spec = std::pow(std::max(glm::dot(viewDir, reflectDir), 0.0f), shininess);
+        auto specular = lightColor * specularStrength * spec * specularColor;
+
+        glm::vec3 color = ambient + diffuse + specular;
+        fragColor = {color, 1.0f};
     }
 
+    glm::vec3 viewPos{0.0f, 0.0f, 1.0f};
+    Texture2D diffuseTexture;
+    Texture2D specularTexture;
+
 private:
-    const glm::vec3 lightDir{0.0f, 0.0f, -1.0f};
+    const glm::vec3 ambientColor{1.0f, 1.0f, 1.0f};
+    const glm::vec3 lightColor{1.0f, 1.0f, 1.0f};
+
+    const float ambientStrength = 0.1f;
+    const glm::vec3 lightPos{1.2f, 1.0f, 2.0f};
+    const float diffuseStrength = 0.8f;
+    const float specularStrength = 0.5f;
+    const float shininess = 32.0f;
 };
 
 int main() {
-    std::vector<glm::vec3> verts;
-    std::vector<glm::vec2> uvs;
-    std::vector<glm::vec3> normals;
-    model.verts(verts);
-    model.uvs(uvs);
-    model.normals(normals);
+    Model headModel("assets/african_head.obj");
+    std::vector<glm::vec3> headVerts;
+    std::vector<glm::vec2> headUvs;
+    std::vector<glm::vec3> headNormals;
+    headModel.verts(headVerts);
+    headModel.uvs(headUvs);
+    headModel.normals(headNormals);
+
+    Model headEyeInnerModel("assets/african_head_eye_inner.obj");
+    std::vector<glm::vec3> headEyeInnerVerts;
+    std::vector<glm::vec2> headEyeInnerUvs;
+    std::vector<glm::vec3> headEyeInnerNormals;
+    headEyeInnerModel.verts(headEyeInnerVerts);
+    headEyeInnerModel.uvs(headEyeInnerUvs);
+    headEyeInnerModel.normals(headEyeInnerNormals);
+
+    FppCamera camera;
+    camera.setFov(60.0f);
+    camera.setPosition(glm::vec3(0.0f, 0.0f, 3.0f));
+    camera.setPitch(0.0f);
+    camera.setYaw(-90.0f);
 
     Program<VShader, FShader> program;
-    program.attributePointer("aPosition", 3, (float *) verts.data());
-    program.attributePointer("aTexCoords", 2, (float *) uvs.data());
-    program.attributePointer("aNormal", 3, (float *) normals.data());
 
-    Window window("Soft Renderer", 512, 512, WF_RESIZABLE);
-
+    Window window("Soft Renderer", 256, 256, WF_RESIZABLE);
     window.setHighDpi(false);
     printf("Framebuffer: %d, %d\n", window.getFramebufferWidth(), window.getFramebufferHeight());
 
+    window.onMouseMove([&](int x, int y) {
+        camera.processMouseMove(x, y);
+        printf("%d %d\n", x, y);
+    });
+
+    window.onMouseScroll([&](mfb_key_mod mod, float deltaX, float deltaY) {
+        camera.processMouseScroll(deltaX, deltaY);
+    });
+
     window.onUpdate([&](Framebuffer &framebuffer) {
+        camera.setAspect((float) framebuffer.width() / (float) framebuffer.height());
+
 
         LOGP_BEG("clear");
         framebuffer.clear(Colorf(0.0f, 0.0f, 0.0f, 1.0f));
         LOGP_END("clear");
 
         LOGP_BEG("draw");
-        program.drawTriangles(framebuffer, verts.size());
-        // drawModelLines(model, framebuffer);
-        // drawModelTriangles(model, framebuffer);
+
+        glm::mat4 model = glm::mat4(1.0f);
+
+        program.attributePointer("aPosition", 3, (float *) headVerts.data());
+        program.attributePointer("aTexCoords", 2, (float *) headUvs.data());
+        program.attributePointer("aNormal", 3, (float *) headNormals.data());
+        program.getVertexShader().projection = camera.getProjection();
+        program.getVertexShader().view = camera.getView();
+        program.getVertexShader().model = model;
+        program.getFragmentShader().diffuseTexture = headModel.diffuse();
+        program.getFragmentShader().specularTexture = headModel.specular();
+        program.getFragmentShader().viewPos = camera.getPosition();
+        program.drawTriangles(framebuffer, headVerts.size());
+
+        program.attributePointer("aPosition", 3, (float *) headEyeInnerVerts.data());
+        program.attributePointer("aTexCoords", 2, (float *) headEyeInnerUvs.data());
+        program.attributePointer("aNormal", 3, (float *) headEyeInnerNormals.data());
+        program.getVertexShader().projection = camera.getProjection();
+        program.getVertexShader().view = camera.getView();
+        program.getVertexShader().model = model;
+        program.getFragmentShader().diffuseTexture = headEyeInnerModel.diffuse();
+        program.getFragmentShader().specularTexture = headEyeInnerModel.specular();
+        program.getFragmentShader().viewPos = camera.getPosition();
+        program.drawTriangles(framebuffer, headEyeInnerVerts.size());
+
         LOGP_END("draw");
     });
     window.catchSignals();

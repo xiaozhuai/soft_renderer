@@ -22,14 +22,23 @@ public:
 
     bool load(const std::string &file, bool flipVertically = true);
 
-    inline bool valid() const { return !m_pixels.empty(); }
+    inline bool valid() const { return m_pixels != nullptr; }
 
     Colorf texture(const glm::vec2 &uv) const;
 
 private:
+    inline int size() const { return m_width * m_height * 4; }
+
+    inline void resize() {
+        int s = size();
+        if (s == 0) m_pixels.reset();
+        else m_pixels = std::shared_ptr<uint8_t>(new uint8_t[s], std::default_delete<uint8_t[]>());
+    }
+
+private:
     int m_width = 0;
     int m_height = 0;
-    std::vector<uint8_t> m_pixels; // RGBA8888
+    std::shared_ptr<uint8_t> m_pixels; // RGBA8888
 
 };
 

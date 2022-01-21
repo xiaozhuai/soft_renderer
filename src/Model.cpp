@@ -63,6 +63,7 @@ Model::Model(const std::string &filename) {
     }
 
     loadTexture(filename, "_diffuse.tga", m_diffuse);
+    loadTexture(filename, "_spec.tga", m_specular);
 }
 
 void Model::loadTexture(const std::string &filename, const std::string &suffix, Texture2D &texture) {

@@ -51,8 +51,8 @@ public:
     virtual void main(glm::vec4 &position) = 0;
 
     inline void setContext(int idx,
-                    const std::unordered_map<std::string, AVData> *attributes,
-                    std::unordered_map<std::string, AVData> *varyings) {
+                           const std::unordered_map<std::string, AVData> *attributes,
+                           std::unordered_map<std::string, AVData> *varyings) {
         m_idx = idx;
         m_attributes = attributes;
         m_varyings = varyings;
@@ -117,6 +117,10 @@ class Program final {
 public:
     Program() = default;
 
+    VS &getVertexShader() { return m_vsTpl; }
+
+    FS &getFragmentShader() { return m_fsTpl; }
+
     void attributePointer(const std::string &name, int size, const float *data) {
         m_externalAttributes[name] = AttributeInfo{
                 .size = size,
@@ -127,7 +131,7 @@ public:
     void drawTriangles(Framebuffer &framebuffer, int count, int offset = 0) {
         alloc(count, offset);
         oneapi::tbb::parallel_for(0, count, [&](int i) {
-            VS vs;
+            VS vs = m_vsTpl;
             vs.setContext(i, &m_attributes, &m_varyings);
             vs.main(m_positions[i]);
         });
@@ -145,11 +149,11 @@ public:
                                     const std::unordered_map<std::string, glm::vec4> &varyingsValue) {
                                 if (p.z < std::numeric_limits<uint16_t>::min()
                                     || p.z > std::numeric_limits<uint16_t>::max()
-                                    || p.z < framebuffer.getDepth(p.x, p.y)) {
+                                    || p.z > framebuffer.getDepth(p.x, p.y)) {
                                     return;
                                 }
 
-                                FS fs;
+                                FS fs = m_fsTpl;
                                 fs.setContext(&m_varyings, &varyingsValue);
 
                                 Colorf fragColor = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -225,6 +229,8 @@ private:
     std::unordered_map<std::string, AttributeInfo> m_externalAttributes;
     std::unordered_map<std::string, AVData> m_attributes;
     std::unordered_map<std::string, AVData> m_varyings;
+    VS m_vsTpl;
+    FS m_fsTpl;
 };
 
 #endif //SOFT_RENDERER_ISHADER_H

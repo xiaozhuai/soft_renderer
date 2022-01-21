@@ -12,11 +12,11 @@ inline T clamp(T value, T low, T high) {
 }
 
 Texture2D::Texture2D(int width, int height, const uint8_t *data) {
-    m_pixels.resize(width * height * 4);
+    resize();
     if (data == nullptr) {
-        memset(m_pixels.data(), 0, m_pixels.size());
+        memset(m_pixels.get(), 0, size());
     } else {
-        memcpy(m_pixels.data(), data, m_pixels.size());
+        memcpy(m_pixels.get(), data, size());
     }
 }
 
@@ -33,13 +33,13 @@ bool Texture2D::load(const std::string &file, bool flipVertically) {
     if (data == nullptr) {
         m_width = 0;
         m_height = 0;
-        m_pixels.resize(0);
+        resize();
         return false;
     }
     m_width = w;
     m_height = h;
-    m_pixels.resize(w * h * 4);
-    memcpy(m_pixels.data(), data, m_pixels.size());
+    resize();
+    memcpy(m_pixels.get(), data, size());
     return valid();
 }
 
@@ -52,7 +52,7 @@ Colorf Texture2D::texture(const glm::vec2 &uv) const {
     newUV.y = clamp(newUV.y, 0.0f, 1.0f);
     int x = (int) std::round(newUV.x * float(m_width));
     int y = (int) std::round(newUV.y * float(m_height));
-    const uint8_t *p = m_pixels.data() + (m_width * y + x) * 4;
+    const uint8_t *p = m_pixels.get() + (m_width * y + x) * 4;
     return {
             float(p[0]) / 255.0f,
             float(p[1]) / 255.0f,
